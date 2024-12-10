@@ -14,12 +14,27 @@ import matplotlib.pyplot as plt
 import numpy as np
 from keras import layers, Model
 
-class Generator:
+class Generator(nn.Module):
 
-    def __init__(self):
-        self.initVariable = 1
+    def __init__(self, noise_dim):
+        super(Generator, self).__init__()
+        self.noise_dim = noise_dim
+        self.model = nn.Sequential(
+            nn.Linear(noise_dim, 256),
+            nn.LeakyReLU(0.2),
+            nn.Linear(256, 512),
+            nn.LeakyReLU(0.2),
+            nn.Linear(512, 1024),
+            nn.LeakyReLU(0.2),
+            nn.Linear(1024, 64 * 64 * 3),  # Adjusted for 3 channels
+            nn.Tanh()
+        )
+
+    def forward(self, x):
+        x = self.model(x)
+        return x.view(x.size(0), 3, 64, 64)  # Reshape for RGB image output
     def lossFunction(self):
-        
+        criterion = nn.BCEWithLogitsLoss()
         return
     def builModel(self):
 
@@ -28,21 +43,3 @@ class Generator:
 
         return
 
-# Generator Network
-# def build_generator(input_dim=100):
-#     """Generator model to generate fake images"""
-#     model = tf.keras.Sequential([
-#         layers.Input(shape=(input_dim,)),  # Explicitly defining the input layer
-#         layers.Dense(256, activation="relu"),
-#         layers.BatchNormalization(),
-#         layers.Dense(512, activation="relu"),
-#         layers.BatchNormalization(),
-#         layers.Dense(1024, activation="relu"),
-#         layers.BatchNormalization(),
-#         layers.Dense(64 * 64 * 3, activation="tanh"),
-#         layers.Reshape((64, 64, 3))  # Assuming image size of 64x64x3 (RGB)
-#     ])
-#     model.compile()
-#     return model
-#
-# generator = build_generator()
