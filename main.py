@@ -15,15 +15,12 @@ from torch.utils.data import Dataset, DataLoader
 from HDF5Dataset import HDF5Dataset, preprocess_and_save_to_hdf5
 import multiprocessing
 import torch.distributed as dist
-
-def sendData(smth=None):
-    return smth
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 NOISE_DIM = 100
-NUM_EPOCHS = 5
-BATCH_SIZE = 256
+NUM_EPOCHS = 1
+BATCH_SIZE = 120
 HDF5_FILE = "preprocessed_dataset.h5"
-
 
 def split_dataset(dataset, num_splits, rank):
     """
@@ -50,15 +47,21 @@ def split_dataset(dataset, num_splits, rank):
 
 def main(rank, num_processes):
 
-    dist.init_process_group(backend='gloo', init_method='file:///tmp/sharedfile', rank=rank, world_size=num_processes)
+    os.environ['RANK'] = str(rank)
+    os.environ['WORLD_SIZE'] = str(num_processes)
+    dist.init_process_group(
+        backend='gloo',
+        init_method='tcp://127.0.0.1:29500',
+        rank=rank,
+        world_size=num_processes
+    )
     generator = Generator(NOISE_DIM)
     discriminator = Discriminator()
 
-    device = 'cpu'
-    generator = generator.to(device)
-    discriminator = discriminator.to(device)
+    generator = DDP(generator, device_ids=None)
+    discriminator = DDP(discriminator, device_ids=None)
 
-    sendData(generator)
+    device = 'cpu'
 
     generator_optimizer = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
     discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.999))
@@ -84,8 +87,7 @@ def main(rank, num_processes):
                 download=False
             )
             preprocess_and_save_to_hdf5(train_dataset, HDF5_FILE)
-        # Barrier to ensure all ranks wait for preprocessing to complete
-        dist.barrier()
+    dist.barrier()  # Synchronize all processes after preprocessing is completed by rank 0
 
     # Load data from HDF5
         # Load HDF5 dataset and split it for this worker
@@ -135,6 +137,7 @@ def main(rank, num_processes):
                       f"Discriminator Loss: {real_loss.item() + fake_loss.item():.4f}, "
                       f"Generator Loss: {gen_loss.item():.4f}")
 
+    dist.destroy_process_group()
     # Generate and save images
     def generate_and_save_images(model, epoch, noise):
         model.eval()
@@ -155,21 +158,28 @@ def main(rank, num_processes):
     # Generate test noise
     test_noise = torch.randn(16, NOISE_DIM, device=device)
     generate_and_save_images(generator, NUM_EPOCHS, test_noise)
-    dist.destroy_process_group()
 
 if __name__ == "__main__":
     import os
-
+    import random
+    import numpy as np
+    torch.multiprocessing.set_start_method('spawn', force=True)
     processes = []
     num_processes = multiprocessing.cpu_count()
-    os.environ["C10D_DEBUG_RANDOM"] = "1"
     os.environ["MASTER_ADDR"] = "127.0.0.1"  # Localhost (use IP for distributed multi-node training)
     os.environ["MASTER_PORT"] = "29500"  # A random port number in the range 1024–65535 (avoid clashes)
+    os.environ["TORCH_DISTRIBUTED_DEBUG"] = "DETAIL"
+    os.environ["PYTHONHASHSEED"] = "42"
+    torch.manual_seed(42)
+    random.seed(42)
+    np.random.seed(42)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     torch.multiprocessing.spawn(
         main,  # Target function
         args=(num_processes,),  # Arguments passed to `main`
         nprocs=num_processes,  # Total number of processes
-        join=True  # Wait for processes to finish
+        join=True,  # Wait for processes to finish,
     )
 
     print("All processes finished.")

@@ -3,8 +3,6 @@ import os
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-import tensorflow as tf
-keras = tf.keras
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,7 +10,6 @@ import torchvision
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 import numpy as np
-from keras import layers, Model
 
 class Discriminator(nn.Module):
     def __init__(self):

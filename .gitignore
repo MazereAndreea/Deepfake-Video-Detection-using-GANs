@@ -10,3 +10,4 @@ preprocessed_dataset.h5
 *.png
 *.zip
 *.py
+/.venv-3.9

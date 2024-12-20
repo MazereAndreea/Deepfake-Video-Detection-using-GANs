@@ -33,19 +33,11 @@ class HDF5Dataset(Dataset):
             return len(file["images"])
 
     def __getitem__(self, idx):
-        # Each worker opens its own connection to the file
-        worker_info = get_worker_info()
-        if worker_info is None:
-            # Single-process data loading (no workers)
-            hdf5_file = h5py.File(self.hdf5_path, "r")
-        else:
-            # Multi-worker data loading: Use worker-specific file handle
-            if not hasattr(self, "hdf5_file"):
-                self.hdf5_file = h5py.File(self.hdf5_path, "r")
-
-        # Access the image at the given index
-        image = self.hdf5_file["images"][idx]
-        return torch.tensor(image, dtype=torch.float32)
+        # Open the HDF5 file for each worker
+        with h5py.File(self.hdf5_path, "r") as hdf5_file:
+            # Access the image at the given index
+            image = hdf5_file["images"][idx]
+            return torch.tensor(image, dtype=torch.float32)
 
     def __len__(self):
         return self.dataset_length
