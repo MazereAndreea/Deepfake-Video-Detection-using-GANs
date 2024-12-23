@@ -1,4 +1,11 @@
 import os
+
+from torch._C._profiler import ProfilerActivity
+from torch.autograd.profiler import record_function
+from torch.profiler import profile
+from torchvision.utils import save_image
+
+import discriminator
 from discriminator import Discriminator
 # from displayImageFromVideo import display_image
 # from displayImageFromVideo import display_images_from_video_list
@@ -9,18 +16,22 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from torch.utils.data import Subset
 from torch.utils.data import Dataset, DataLoader
 from HDF5Dataset import HDF5Dataset, preprocess_and_save_to_hdf5
 import multiprocessing
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
+from video_analysis import analyze_all_videos_in_directory
+from torch.utils.tensorboard import SummaryWriter
 
 NOISE_DIM = 100
-NUM_EPOCHS = 1
-BATCH_SIZE = 120
+NUM_EPOCHS = 10
+BATCH_SIZE = 256
 HDF5_FILE = "preprocessed_dataset.h5"
+lr_gen = 0.005
+lr_disc = 0.005
 
 def split_dataset(dataset, num_splits, rank):
     """
@@ -45,119 +56,154 @@ def split_dataset(dataset, num_splits, rank):
 
     return Subset(dataset, split_indices)
 
+
+def train_step(generator, discriminator, data, real_labels, fake_labels, criterion, generator_optimizer,
+               discriminator_optimizer, device):
+
+    """
+    Perform one step of training for the discriminator and generator.
+    """
+    real_images = data.to(device)
+    real_outputs = discriminator(real_images)
+    real_loss = criterion(real_outputs, real_labels)
+    real_loss.backward()
+
+    noise = torch.randn(real_images.size(0), NOISE_DIM, device=device)
+    with torch.no_grad():
+        fake_images = generator(noise)
+
+    # Profile discriminator fake image processing
+    fake_outputs = discriminator(fake_images.detach())
+    fake_loss = criterion(fake_outputs, fake_labels)
+    fake_loss.backward()
+    discriminator_optimizer.step()
+
+    # Profile generator step
+    generator_optimizer.zero_grad()
+    fake_outputs = discriminator(fake_images)
+    gen_loss = criterion(fake_outputs, real_labels)  # Generator wants discriminator to think fake is real
+
+    gen_loss.backward()
+    generator_optimizer.step()
+
+    return real_loss, fake_loss, gen_loss, fake_images
+
 def main(rank, num_processes):
 
-    os.environ['RANK'] = str(rank)
-    os.environ['WORLD_SIZE'] = str(num_processes)
-    dist.init_process_group(
-        backend='gloo',
-        init_method='tcp://127.0.0.1:29500',
-        rank=rank,
-        world_size=num_processes
-    )
-    generator = Generator(NOISE_DIM)
-    discriminator = Discriminator()
+    try:
+        os.environ['RANK'] = str(rank)
+        os.environ['WORLD_SIZE'] = str(num_processes)
+        dist.init_process_group(
+            backend='gloo',
+            init_method='tcp://127.0.0.1:29500',
+            rank=rank,
+            world_size=num_processes
+        )
 
-    generator = DDP(generator, device_ids=None)
-    discriminator = DDP(discriminator, device_ids=None)
+        device = torch.device("cpu")
+        generator = Generator(NOISE_DIM).to(device)
+        discriminator = Discriminator().to(device)
 
-    device = 'cpu'
+        generator = DDP(generator)
+        discriminator = DDP(discriminator)
 
-    generator_optimizer = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-    discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=0.0001, betas=(0.5, 0.999))
+        generator_optimizer = optim.Adam(generator.parameters(), lr=lr_gen, betas=(0.5, 0.999))
+        discriminator_optimizer = optim.Adam(discriminator.parameters(), lr=lr_disc, betas=(0.5, 0.999))
 
-    # CelebA dataset
-    transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),  # Convert to grayscale (1 channel)
-        transforms.CenterCrop(178),# Decuparea centrului pentru păstrarea feței.
-        transforms.Resize(64), # Redimensionarea imaginilor la 64x64.
-        transforms.ToTensor(), # Conversia imaginii la tensor PyTorch.
-        # Normalizarea imaginilor la intervalul [-1, 1].
-        transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize grayscale values to range [-1, 1]
-    ])
+        log_dir = './logs/tensorboard'
+        writer = SummaryWriter(log_dir=log_dir)
 
-    # Check if the HDF5 file exists
-    if not os.path.exists(HDF5_FILE):
-        # Preprocess dataset and save if not already cached
-        if rank == 0:
-            train_dataset = torchvision.datasets.CelebA(
-                root='C:/Users/ANDREEA/PycharmProjects/Rn/data/',
-                split='train',
-                transform=transform,
-                download=False
-            )
-            preprocess_and_save_to_hdf5(train_dataset, HDF5_FILE)
-    dist.barrier()  # Synchronize all processes after preprocessing is completed by rank 0
+        # CelebA dataset
+        transform = transforms.Compose([
+            transforms.Grayscale(num_output_channels=1),  # Convert to grayscale (1 channel)
+            transforms.CenterCrop(178),# Decuparea centrului pentru păstrarea feței.
+            transforms.Resize(64), # Redimensionarea imaginilor la 64x64.
+            transforms.ToTensor(), # Conversia imaginii la tensor PyTorch.
+            # Normalizarea imaginilor la intervalul [-1, 1].
+            transforms.Normalize(mean=[0.5], std=[0.5])  # Normalize grayscale values to range [-1, 1]
+        ])
 
-    # Load data from HDF5
-        # Load HDF5 dataset and split it for this worker
-    full_dataset = HDF5Dataset(HDF5_FILE)
-    worker_dataset = split_dataset(full_dataset, num_processes, rank)
-    train_loader = DataLoader(worker_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
+        # Check if the HDF5 file exists
+        if not os.path.exists(HDF5_FILE):
+            # Preprocess dataset and save if not already cached
+            if rank == 0:
+                train_dataset = torchvision.datasets.CelebA(
+                    root='/home/andreeamazere.am/C:/Users/ANDREEA/PycharmProjects/Rn/data/',
+                    split='train',
+                    transform=transform,
+                    download=False
+                )
+                preprocess_and_save_to_hdf5(train_dataset, HDF5_FILE)
+        dist.barrier()  # Synchronize all processes after preprocessing is completed by rank 0
 
-    # train_dataset = torchvision.datasets.CelebA(root='C:/Users/ANDREEA/PycharmProjects/Rn/data/', split = 'train', transform=transform, download=False)
-    # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
+        # Load data from HDF5
+            # Load HDF5 dataset and split it for this worker
+        full_dataset = HDF5Dataset(HDF5_FILE)
+        limited_dataset = Subset(full_dataset, list(range(1000)))
+        worker_dataset = split_dataset(limited_dataset, num_processes, rank)
+        train_loader = DataLoader(
+            worker_dataset,
+            batch_size=BATCH_SIZE,
+            shuffle=True
+        )
 
-    # Loss function
-    criterion = nn.BCEWithLogitsLoss()
-    # Training loop
+        # train_dataset = torchvision.datasets.CelebA(root='C:/Users/ANDREEA/PycharmProjects/Rn/data/', split = 'train', transform=transform, download=False)
+        # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
 
-    for epoch in range(NUM_EPOCHS):
-        for i, data in enumerate(train_loader):
-            real_images = data
-            real_images = real_images.to(device)
+        # Loss function
+        criterion = nn.BCEWithLogitsLoss()
+        # Training loop
 
-            # Train discriminator with real images
-            discriminator_optimizer.zero_grad()
-            real_labels = torch.ones(real_images.size(0), 1, device=device)
-            real_outputs = discriminator(real_images)
-            real_loss = criterion(real_outputs, real_labels)
-            real_loss.backward()
+        # Training loop
+        for epoch in range(NUM_EPOCHS):
+            for i, data in enumerate(train_loader):
+                real_labels = torch.ones(data.size(0), 1, device=device)
+                fake_labels = torch.zeros(data.size(0), 1, device=device)
 
-            # Train discriminator with fake images
-            noise = torch.randn(real_images.size(0), NOISE_DIM, device=device)
-            fake_images = generator(noise)
-            fake_labels = torch.zeros(real_images.size(0), 1, device=device)
-            fake_outputs = discriminator(fake_images.detach())
-            fake_loss = criterion(fake_outputs, fake_labels)
-            fake_loss.backward()
-            discriminator_optimizer.step()
+                # Perform training step and profile
+                real_loss, fake_loss, gen_loss, fake_images = train_step(generator, discriminator, data,
+                                                                         real_labels,
+                                                                         fake_labels,
+                                                                         criterion, generator_optimizer,
+                                                                         discriminator_optimizer,
+                                                                         device)
 
-            # Train generator
-            generator_optimizer.zero_grad()
-            fake_labels = torch.ones(real_images.size(0), 1, device=device)
-            fake_outputs = discriminator(fake_images)
-            gen_loss = criterion(fake_outputs, fake_labels)
-            gen_loss.backward()
-            generator_optimizer.step()
+                if i % 100 == 0:
+                    # Log losses to TensorBoard
+                    writer.add_scalar('Loss/Discriminator', real_loss.item() + fake_loss.item(),
+                                      epoch * len(train_loader) + i)
+                    writer.add_scalar('Loss/Generator', gen_loss.item(), epoch * len(train_loader) + i)
 
-            # Print losses
-            if i % 100 == 0:
-                print(f"Worker {rank + 1}, Epoch [{epoch + 1}/{NUM_EPOCHS}], Step [{i + 1}/{len(train_loader)}], "
-                      f"Discriminator Loss: {real_loss.item() + fake_loss.item():.4f}, "
-                      f"Generator Loss: {gen_loss.item():.4f}")
+                    print(
+                        f"Worker {rank + 1}, Epoch [{epoch + 1}/{NUM_EPOCHS}], Step [{i + 1}/{len(train_loader)}], "
+                        f"Discriminator Loss: {real_loss.item() + fake_loss.item():.4f}, "
+                        f"Generator Loss: {gen_loss.item():.4f}")
 
-    dist.destroy_process_group()
-    # Generate and save images
-    def generate_and_save_images(model, epoch, noise):
-        model.eval()
-        with torch.no_grad():
-            fake_images = model(noise).cpu()
-            fake_images = fake_images.view(fake_images.size(0), 3, 64, 64)
-            for i in range(fake_images.size(0)):
-                # Move channels to the last dimension for matplotlib
-                image = fake_images[i].permute(1, 2, 0)  # [C, H, W] -> [H, W, C]
-                image = (image * 0.5 + 0.5).numpy()  # Denormalize for proper visualization
-                plt.subplot(4, 4, i+1)
-                plt.imshow(image)
-                plt.axis('off')
+                # Log images to TensorBoard every 100 steps
+                if i % 100 == 0:
+                    writer.add_images('Generated_Images', fake_images, epoch * len(train_loader) + i)
 
-            plt.savefig(f'image_at_epoch_{epoch+1:04d}.png')
-            plt.show()
+            # Step the profiler after each epoch to collect data
 
-    # Generate test noise
-    test_noise = torch.randn(16, NOISE_DIM, device=device)
-    generate_and_save_images(generator, NUM_EPOCHS, test_noise)
+        dist.destroy_process_group()
+        # # Generate and save images
+        # def generate_and_save_images(model, epoch, noise):
+        #     model.eval()
+        #     with torch.no_grad():
+        #         fake_images = model(noise).cpu()
+        #         fake_images = fake_images.view(fake_images.size(0), 3, 64, 64)
+        #         save_path = f'generated_images_epoch_{epoch}.png'
+        #         save_image(fake_images, save_path)  # Save the generated images
+        #         print(f"Generated image saved to {save_path}")
+
+        # Generate test noise
+        test_noise = torch.randn(16, NOISE_DIM, device=device)
+        writer.close()
+        
+    except Exception as e:
+        import traceback
+        print(f"Exception occurred in process {rank}:\n{traceback.format_exc()}")
+        raise
 
 if __name__ == "__main__":
     import os
@@ -182,5 +228,5 @@ if __name__ == "__main__":
         join=True,  # Wait for processes to finish,
     )
 
-    print("All processes finished.")
+    print("Training finished")
     #main()

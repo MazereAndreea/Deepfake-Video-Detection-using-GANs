@@ -8,7 +8,7 @@ def preprocess_and_save_to_hdf5(dataset, hdf5_path):
     print("Preprocessing dataset and saving to HDF5...")
     with h5py.File(hdf5_path, "w") as hdf5_file: #crearea unui fișier HDF5 gol
         # Dimensiuni - (număr total imagini, canale RGB, înălțime, lățime)
-        img_shape = (len(dataset), 3, 64, 64)
+        img_shape = (len(dataset), 1, 64, 64)
         # Imaginile sunt stocate ca valori `float32`
         # utile pentru operații ulterioare precum normalizarea
         hdf5_file.create_dataset("images", shape=img_shape, dtype=np.float32)
@@ -31,6 +31,14 @@ class HDF5Dataset(Dataset):
         # Open the file temporarily to determine dataset size
         with h5py.File(self.hdf5_path, "r") as file:
             return len(file["images"])
+
+    def _ensure_open(self):
+        if self.file is None:
+            worker_info = get_worker_info()
+            if worker_info is None:  # Single-process DataLoader
+                self.file = h5py.File(self.hdf5_path, "r")
+            else:  # Multi-process DataLoader
+                self.file = h5py.File(self.hdf5_path, "r", libver='latest')
 
     def __getitem__(self, idx):
         # Open the HDF5 file for each worker

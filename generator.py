@@ -4,13 +4,13 @@ os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
-import torch
+# import torch
 import torch.nn as nn
-import torch.optim as optim
-import torchvision
-import torchvision.transforms as transforms
-import matplotlib.pyplot as plt
-import numpy as np
+# import torch.optim as optim
+# import torchvision
+# import torchvision.transforms as transforms
+# import matplotlib.pyplot as plt
+# import numpy as np
 
 class Generator(nn.Module):
 
@@ -24,16 +24,21 @@ class Generator(nn.Module):
             nn.LeakyReLU(0.2),
             nn.Linear(512, 1024),
             nn.LeakyReLU(0.2),
-            nn.Linear(1024, 64 * 64 * 3),  # Adjusted for 3 channels
+            nn.Linear(1024, 64 * 64 * 1),  # Adjusted for 1 channels
             nn.Tanh()
         )
 
     def forward(self, x):
         x = self.model(x)
-        return x.view(x.size(0), 3, 64, 64)  # Reshape for RGB image output
+        return x.view(x.size(0), 1, 64, 64)  # Reshape for RGB image output
     def lossFunction(self):
         criterion = nn.BCEWithLogitsLoss()
         return
+    def initialize_weights(model):
+        for m in model.modules():
+            if isinstance(m, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+                nn.init.normal_(m.weight, mean=0.0, std=0.02)
+
     def builModel(self):
 
         return
