@@ -17,7 +17,7 @@ def sendData(smth=None):
     return smth
 
 NOISE_DIM = 100
-NUM_EPOCHS = 1
+NUM_EPOCHS = 5
 BATCH_SIZE = 128
 HDF5_FILE = "preprocessed_dataset.h5"
 
@@ -26,7 +26,7 @@ def main():
     generator = Generator(NOISE_DIM)
     discriminator = Discriminator()
 
-    device = 'cpu'
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     generator = generator.to(device)
     discriminator = discriminator.to(device)
 
@@ -104,7 +104,7 @@ def main():
     def generate_and_save_images(writer, model, epoch):
         model.eval()
         with torch.no_grad():
-            noise = torch.randn(16, NOISE_DIM, device='cpu')
+            noise = torch.randn(16, NOISE_DIM, device=device)
             fake_images = model(noise).cpu()
 
             # Normalize the images to [0, 1] for TensorBoard
