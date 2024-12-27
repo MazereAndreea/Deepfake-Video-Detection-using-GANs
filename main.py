@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from HDF5Dataset import HDF5Dataset, preprocess_and_save_to_hdf5
+from torch.utils.tensorboard import SummaryWriter
 
 def sendData(smth=None):
     return smth
@@ -21,6 +22,7 @@ BATCH_SIZE = 128
 HDF5_FILE = "preprocessed_dataset.h5"
 
 def main():
+    writer = SummaryWriter(log_dir="runs/generative_model")
     generator = Generator(NOISE_DIM)
     discriminator = Discriminator()
 
@@ -92,29 +94,27 @@ def main():
 
             # Print losses
             if i % 100 == 0:
+                writer.add_scalar("Loss/Discriminator", real_loss.item() + fake_loss.item(),epoch * len(train_loader) + i)
+                writer.add_scalar("Loss/Generator", gen_loss.item(), epoch * len(train_loader) + i)
                 print(f'Epoch [{epoch+1}/{NUM_EPOCHS}], Step [{i + 1}/{len(train_loader)}], '
                       f'Discriminator Loss: {real_loss.item() + fake_loss.item():.4f}, '
                       f'Generator Loss: {gen_loss.item():.4f}')
 
     # Generate and save images
-    def generate_and_save_images(model, epoch, noise):
+    def generate_and_save_images(writer, model, epoch):
         model.eval()
         with torch.no_grad():
+            noise = torch.randn(16, NOISE_DIM, device='cpu')
             fake_images = model(noise).cpu()
-            fake_images = fake_images.view(fake_images.size(0),3, 64, 64)
 
-            fig = plt.figure(figsize=(4, 4))
-            for i in range(fake_images.size(0)):
-                plt.subplot(4, 4, i+1)
-                plt.imshow(fake_images[i], cmap='gray')
-                plt.axis('off')
+            # Normalize the images to [0, 1] for TensorBoard
+            fake_images = (fake_images + 1) / 2
 
-            plt.savefig(f'image_at_epoch_{epoch+1:04d}.png')
-            plt.show()
+            # Log the images to TensorBoard
+            writer.add_images(f"Generated Images/Epoch {epoch + 1}", fake_images, epoch)
 
-    # Generate test noise
-    test_noise = torch.randn(16, NOISE_DIM, device=device)
-    generate_and_save_images(generator, NUM_EPOCHS, test_noise)
+    generate_and_save_images(writer, generator, epoch)
+    writer.close()
 
 if __name__ == "__main__":
     main()
