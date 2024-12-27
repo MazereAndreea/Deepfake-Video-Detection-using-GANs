@@ -1,8 +1,5 @@
 import os
 from discriminator import Discriminator
-from displayImageFromVideo import display_image
-from displayImageFromVideo import display_images_from_video_list
-from displayImageFromVideo import play_video
 from generator import Generator
 import h5py
 import torch
@@ -19,11 +16,9 @@ def sendData(smth=None):
     return smth
 
 NOISE_DIM = 100
-NUM_EPOCHS = 5
-BATCH_SIZE = 256
+NUM_EPOCHS = 1
+BATCH_SIZE = 128
 HDF5_FILE = "preprocessed_dataset.h5"
-
-
 
 def main():
     generator = Generator(NOISE_DIM)
@@ -60,9 +55,6 @@ def main():
     # Load data from HDF5
     train_dataset = HDF5Dataset(HDF5_FILE)
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
-    for data in train_loader:
-        print(type(data), len(data))
-        break
     # train_dataset = torchvision.datasets.CelebA(root='C:/Users/ANDREEA/PycharmProjects/Rn/data/', split = 'train', transform=transform, download=False)
     # train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
 
@@ -109,7 +101,7 @@ def main():
         model.eval()
         with torch.no_grad():
             fake_images = model(noise).cpu()
-            fake_images = fake_images.view(fake_images.size(0), 28, 28)
+            fake_images = fake_images.view(fake_images.size(0),3, 64, 64)
 
             fig = plt.figure(figsize=(4, 4))
             for i in range(fake_images.size(0)):
