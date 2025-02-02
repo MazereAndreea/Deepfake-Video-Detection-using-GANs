@@ -6,31 +6,27 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import torch.nn as nn
 
 class Generator(nn.Module):
-
-    def __init__(self, noise_dim):
+    def __init__(self):
         super(Generator, self).__init__()
-        self.noise_dim = noise_dim
-        self.model = nn.Sequential(
-            nn.Linear(noise_dim, 256),
-            nn.LeakyReLU(0.2),
-            nn.Linear(256, 512),
-            nn.LeakyReLU(0.2),
-            nn.Linear(512, 1024),
-            nn.LeakyReLU(0.2),
-            nn.Linear(1024, 64 * 64 * 3),  # Adjusted for 3 channels
+        self.main = nn.Sequential(
+            nn.ConvTranspose2d(100, 64 * 8, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(64 * 8),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64 * 8, 64 * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64 * 4),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64 * 4, 64 * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64 * 2),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64 * 2, 64, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 3, 4, 2, 1, bias=False),
             nn.Tanh()
         )
 
-    def forward(self, x):
-        x = self.model(x)
-        return x.view(x.size(0), 3, 64, 64)  # Reshape for RGB image output
+    def forward(self, input):
+        return self.main(input)
     def lossFunction(self):
         criterion = nn.BCEWithLogitsLoss()
         return
-    def builModel(self):
-
-        return
-    def trainModel(self,inputX,inputY):
-
-        return
-

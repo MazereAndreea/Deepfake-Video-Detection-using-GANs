@@ -10,28 +10,23 @@ import torch.nn as nn
 class Discriminator(nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(64 * 64 * 3, 512),  # Adjusted for 3 channels
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.3),
-            nn.Linear(512, 256),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.3),
-            nn.Linear(256, 1),
+        self.main = nn.Sequential(
+            nn.Conv2d(3, 64, 4, 2, 1, bias=False),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64, 64 * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64 * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64 * 2, 64 * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64 * 4),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64 * 4, 64 * 8, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(64 * 8),
+            nn.LeakyReLU(0.2, inplace=True),
+            nn.Conv2d(64 * 8, 1, 4, 1, 0, bias=False),
             nn.Sigmoid()
         )
-
-    def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten the input
-        return self.model(x)
+    def forward(self, input):
+        return self.main(input)
     def lossFunction(self):
         criterion = nn.BCEWithLogitsLoss()
-        return
-
-    def builModel(self):
-
-        return
-
-    def trainModel(self,inputX,inputY):
-
         return

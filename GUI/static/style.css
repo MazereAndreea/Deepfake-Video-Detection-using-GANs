@@ -1,0 +1,23 @@
+.frame-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* Auto-fit columns with minimum width of 200px */
+    gap: 30px; /* Space between the frames */
+    justify-items: center; /* Center content horizontally */
+}
+
+.frame-item {
+    text-align: center;
+    border: 1px solid #ddd; /* Border around each frame */
+    padding: 10px;
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); /* Shadow effect for better visual */
+}
+
+.frame-item strong {
+    display: block;
+    margin-top: 10px;
+}
+
+.prediction {
+    font-weight: bold;
+}

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deepfake Detection</title>
+    <link rel="stylesheet" href="../static/style.css">
+</head>
+<body>
+    <h1>Upload a Video for Deepfake Detection</h1>
+
+    <!-- Video upload form -->
+    <form action="{{ url_for('upload_video') }}" method="post" enctype="multipart/form-data">
+        <label>Choose Video:</label>
+        <input type="file" name="video" accept="video/mp4">
+        <button type="submit">Upload</button>
+    </form>
+
+    {% if video_url %}
+        <h3>Detected Frames:</h3>
+        <div class="frame-container">
+            {% for frame in frames_with_predictions %}
+                <div class="frame-item">
+                    <img src="{{ url_for('get_frame', filename=frame.filename) }}" width="200">
+                    <strong>Prediction: </strong>
+                    <span class="prediction">
+                        {% if frame.prediction < 0.5 %}
+                            Fake (Probability: {{ frame.prediction | round(4) }})
+                        {% else %}
+                            Real (Probability: {{ frame.prediction | round(4) }})
+                        {% endif %}
+                    </span>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+</body>
+</html>
