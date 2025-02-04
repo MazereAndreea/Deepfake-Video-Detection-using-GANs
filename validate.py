@@ -18,8 +18,8 @@ writer = SummaryWriter()
 
 
 def validate(generator, discriminator, device, noise_dim, batch_size):
-    generator.eval()  # Set the generator to evaluation mode
-    discriminator.eval()  # Set the discriminator to evaluation mode
+    generator.eval()
+    discriminator.eval()
 
     val_loss = 0.0
     correct = 0
@@ -48,11 +48,11 @@ def validate(generator, discriminator, device, noise_dim, batch_size):
             print(f" Real Images Shape: {real_images.shape}")
 
             # Validation on real images
-            real_labels = torch.ones(batch, device=device)
-            real_outputs = discriminator(real_images).view(-1)
-            real_loss = criterion(real_outputs, real_labels)
-            real_preds = (real_outputs > 0.5).float()
-            correct_real = (real_preds == 1).sum().item()
+            real_labels = torch.ones(batch, device=device) #creare 128 de labels cu 1
+            real_outputs = discriminator(real_images).view(-1) #creare scor + in tensor 1d
+            real_loss = criterion(real_outputs, real_labels) #creare gradiente
+            real_preds = (real_outputs > 0.5).float() #clasifica in 1 pt real, 0 fals (format float)
+            correct_real = (real_preds == 1).sum().item() #pt predictiile de 1 afisare
 
             print(f" Real Loss: {real_loss.item()} | Correct Real: {correct_real}")
 
@@ -98,4 +98,4 @@ discriminator = Discriminator().to(device)
 generator = Generator().to(device)
 discriminator.load_state_dict(torch.load('discriminator_30epochs.pth', map_location=device, weights_only=True))
 generator.load_state_dict(torch.load('generator_30epochs.pth', map_location=device, weights_only=True))
-validate(generator, discriminator, device, 100, 126)
+validate(generator, discriminator, device, 100, 128)

@@ -66,16 +66,21 @@ def main():
             real_images = real_images.to(device)
 
             discriminator.zero_grad()
-            labels = torch.full((real_images.size(0),), np.random.uniform(0.8, 1.0), dtype=torch.float, device=device)
+            labels = torch.full((real_images.size(0),),
+                np.random.uniform(0.8, 1.0),
+                dtype=torch.float, device=device)
             real_outputs = discriminator(real_images)
             real_outputs = real_outputs.view(-1)
             real_loss = criterion(real_outputs, labels)
             real_loss.backward()
             D_real = real_outputs.mean().item()
 
-            noise = torch.randn(real_images.size(0), NOISE_DIM, 1, 1, device=device)
+            noise = torch.randn(real_images.size(0), NOISE_DIM,
+                                1, 1, device=device)
             fake_images = generator(noise)
-            labels = torch.full((real_images.size(0),), np.random.uniform(0.0, 0.2), dtype=torch.float, device=device)
+            labels = torch.full((real_images.size(0),),
+                np.random.uniform(0.0, 0.2),
+                dtype=torch.float, device=device)
             fake_outputs = discriminator(fake_images.detach())
             fake_outputs = fake_outputs.view(-1)
             fake_loss = criterion(fake_outputs, labels)
@@ -91,7 +96,8 @@ def main():
             gen_loss = criterion(gen_outputs, labels)
             gen_loss.backward()
             fake_images_after_update = generator(noise)
-            D_fake_after_update_generator = discriminator(fake_images_after_update).mean().item()
+            D_fake_after_update_generator = discriminator(
+                fake_images_after_update).mean().item()
             generator_optimizer.step()
 
             if i % 50 == 0:

@@ -12,8 +12,8 @@ from torchvision import transforms
 app = Flask(__name__)
 
 # Path for storing uploaded videos and frames
-UPLOAD_FOLDER = 'GUI/static/videos'
-FRAMES_FOLDER = 'GUI/static/frames'
+UPLOAD_FOLDER = 'static/videos'
+FRAMES_FOLDER = 'static/frames'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['FRAMES_FOLDER'] = FRAMES_FOLDER
 
@@ -54,12 +54,13 @@ def upload_video():
         video_path = os.path.join(app.config['UPLOAD_FOLDER'], video_filename)
         video.save(video_path)
 
-        frames_with_predictions = analyze_video(video_path)
+        frames_with_predictions, avg_probability = analyze_video(video_path)
 
         return render_template(
             'index.html',
             video_url=video_filename,
-            frames_with_predictions=frames_with_predictions
+            frames_with_predictions=frames_with_predictions,
+	        avg_probability=avg_probability
         )
     return redirect(url_for('index'))
 
@@ -68,19 +69,21 @@ def analyze_video(video_path):
     frame_index = 0
     frames_with_predictions = []
 
+    total_probability = 0  # Track sum of probabilities
+    frame_count = 0  # Track total frames processed
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-
         faces = detect_faces_mtcnn(frame)
         for face in faces:
             x, y, width, height = face
             face_image = frame[y:y + height, x:x + width]
 
-            # Save the frame and analyze the deepfake
             face_image_filename = f'{uuid.uuid4()}.jpg'
             face_image_path = os.path.join(app.config['FRAMES_FOLDER'], face_image_filename)
+            #face_image_path where is saved, face_image fata detectata
             cv2.imwrite(face_image_path, face_image)
 
             prediction = predict_deepfake_for_video(face_image, transform, discriminator, device)
@@ -92,13 +95,20 @@ def analyze_video(video_path):
                 'prediction': prediction
             })
 
+            total_probability += prediction
+            frame_count += 1
+
         frame_index += 1
 
     cap.release()
-    return frames_with_predictions
+
+    avg_probability = (total_probability / frame_count) if frame_count > 0 else 0
+    return frames_with_predictions, avg_probability
 
 def predict_deepfake_for_video(face_image, transform, discriminator, device):
+    #converts the numpy array to a image
     face_pil = Image.fromarray(cv2.cvtColor(face_image, cv2.COLOR_BGR2RGB))
+    #Face batch of size 1
     face_tensor = transform(face_pil).unsqueeze(0).to(device)  # Add batch dimension
     discriminator.eval()
 
@@ -125,4 +135,5 @@ def get_video(filename):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
+

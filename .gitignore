@@ -24,3 +24,7 @@ requirements.txt
 generator_30epochs.pth
 discriminator_30epochs_valid.pth
 config.py
+/celeba
+*.pth
+/Proiect_final
+*.jpg
