@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deepfake Detection</title>
+    <link rel="stylesheet" href="../static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Upload a Video for Deepfake Detection</h1>
+
+    <!-- Video upload form -->
+    <form action="{{ url_for('upload_video') }}" method="post" enctype="multipart/form-data">
+        <label>Choose Video:</label>
+        <input type="file" name="video" accept="video/mp4">
+        <button type="submit">Upload</button>
+    </form>
+
+    {% if video_url %}
+        <h3>Detected Frames:</h3>
+        <div class="frame-container">
+            {% for frame in frames_with_predictions %}
+                <div class="frame-item">
+                    <img src="{{ url_for('get_frame', filename=frame.filename) }}" width="200">
+                    <strong>Prediction: </strong>
+                    <span class="prediction">
+                        {% if frame['prediction'] < 0.5 %}
+                            Fake (Probability: {{ frame['prediction'] | round(4) }})
+                        {% else %}
+                            Real (Probability: {{ frame['prediction'] | round(4) }})
+                        {% endif %}
+                    </span>
+                </div>
+            {% endfor %}
+        </div>
+
+	<h3>Overall Deepfake Probability:</h3>
+        <p><strong>Average Probability: </strong> {{ avg_probability | round(4) }}</p>
+        {% if avg_probability < 0.5 %}
+          <p style="color: red;"><strong>Final Verdict:</strong> Likely Fake</p>
+        {% else %}
+          <p style="color: green;"><strong>Final Verdict:</strong> Likely Real</p>
+        {% endif %}
+	<h3>Frame Probabilities</h3>
+        <canvas id="probabilityChart" width="400" height="200"></canvas>
+
+        <script>
+            // Prepare the data for the chart
+            const frameIndexes = {{ frames_with_predictions | map(attribute='frame_index') | list }};
+            const frameProbabilities = {{ frames_with_predictions | map(attribute='prediction') | list }};
+
+            // Create the chart
+            const ctx = document.getElementById('probabilityChart').getContext('2d');
+            const probabilityChart = new Chart(ctx, {
+                type: 'line', // Line chart
+                data: {
+                    labels: frameIndexes, // X-axis: frame indexes
+                    datasets: [{
+                        label: 'Probability of Deepfake (Fake = Low)', // Label for the line
+                        data: frameProbabilities, // Y-axis: prediction probabilities
+                        borderColor: 'rgba(75, 192, 192, 1)', // Line color
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)', // Line background color (for fill)
+                        fill: true, // Fill under the line
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Frame Index' // Label for the x-axis
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Probability' // Label for the y-axis
+                            },
+                            min: 0,
+                            max: 1
+                        }
+                    }
+                }
+            });
+        </script>
+    {% endif %}
+</body>
+</html>
