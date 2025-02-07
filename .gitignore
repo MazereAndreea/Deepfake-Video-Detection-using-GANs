@@ -19,7 +19,6 @@ img_align_celeba.zip
 /GUI/static/frames
 HDF5Dataset.py
 HDF5Dataset.py
-requirements.txt
 /GUI/static/videos
 generator_30epochs.pth
 discriminator_30epochs_valid.pth
