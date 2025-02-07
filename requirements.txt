@@ -25,4 +25,4 @@ tensorboard==2.18.0
 tensorboard-data-server==0.7.2
 torch==2.2.2
 torchvision==0.17.2
-pillow==10.2.0
+pillow==10.3.0
