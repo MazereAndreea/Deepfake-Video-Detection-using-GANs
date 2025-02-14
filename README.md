@@ -85,7 +85,7 @@ Using these hyperparameters:
 
 
 ## Steps for pulling the docker image
-Make sure you have docker installed on you machine before completing these steps.
+Make sure you have docker installed on your machine before completing these steps.
 Start docker and open cmd and enter these commands:
 ```bash
   docker login
